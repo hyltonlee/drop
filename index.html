@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+    <title>drop · share</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#0D0D0D;font-family:'Inter',sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px;color:#f5f5f5}
+        .app{max-width:560px;width:100%;display:flex;flex-direction:column;gap:20px}
+        
+        .header{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
+        .header h1{font-size:1.4rem;font-weight:600;color:#f0f0f0;letter-spacing:-.5px}
+        .header h1 i{color:#6a8;margin-right:8px}
+        .header .badge{background:#1a1a1a;padding:4px 14px;border-radius:30px;font-size:.7rem;color:#666;border:1px solid #2a2a2a}
+        
+        .tabs{display:flex;gap:6px;background:#1a1a1a;padding:4px;border-radius:40px;box-shadow:0 0 0 1px #2a2a2a}
+        .tabs button{background:0;border:0;padding:8px 18px;border-radius:30px;font-family:'Inter';font-weight:500;font-size:.8rem;color:#888;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:6px}
+        .tabs button i{font-size:.8rem}
+        .tabs button.active{background:#2d2d2d;color:#f0f0f0;box-shadow:0 0 0 1px #3d3d3d}
+        .tabs button:active{transform:scale(.96)}
+        
+        .panel{display:none;flex-direction:column;gap:16px}
+        .panel.active{display:flex}
+        
+        .drop-zone{background:#141414;border:2px dashed #2a2a2a;border-radius:20px;padding:30px 20px;text-align:center;cursor:pointer;transition:.3s;position:relative}
+        .drop-zone:hover{border-color:#3a3a3a;background:#161616}
+        .drop-zone.dragover{border-color:#6a8;background:#1a2a1a}
+        .drop-zone .icon{font-size:2.5rem;color:#444;margin-bottom:8px}
+        .drop-zone .title{font-size:.95rem;color:#ccc;font-weight:500}
+        .drop-zone .sub{font-size:.75rem;color:#555;margin-top:4px}
+        .drop-zone .file-info{display:none;margin-top:12px;padding:10px 14px;background:#0D0D0D;border-radius:12px;border:1px solid #222;text-align:left}
+        .drop-zone .file-info .name{color:#e0e0e0;font-size:.85rem;font-weight:500;word-break:break-all}
+        .drop-zone .file-info .size{color:#555;font-size:.7rem;margin-top:2px}
+        .drop-zone .file-info .remove{color:#e8b0b0;cursor:pointer;font-size:.7rem;float:right;background:0;border:0}
+        .drop-zone .file-info .remove:hover{color:#ff6b6b}
+        .drop-zone.has-file .file-info{display:block}
+        .drop-zone.has-file .icon,.drop-zone.has-file .title,.drop-zone.has-file .sub{display:none}
+        
+        .share-link-box{background:#141414;border-radius:16px;padding:12px 14px;border:1px solid #222;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .share-link-box input{flex:1;min-width:120px;background:#0D0D0D;border:1px solid #2a2a2a;border-radius:30px;padding:8px 14px;font-family:'Inter';font-size:.8rem;color:#f0f0f0;outline:0}
+        .share-link-box input:focus{border-color:#4a4a4a}
+        .share-link-box button{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:30px;padding:8px 14px;color:#888;cursor:pointer;transition:.2s;font-family:'Inter';font-size:.75rem;white-space:nowrap}
+        .share-link-box button:hover{background:#2a2a2a;color:#ccc}
+        .share-link-box button.primary{background:#1a2a1a;border-color:#2a4a2a;color:#90d090}
+        .share-link-box button.primary:hover{background:#1a3a1a}
+        
+        .status-box{background:#141414;border-radius:16px;padding:10px 14px;border:1px solid #222;display:flex;align-items:center;gap:10px;font-size:.8rem;color:#888}
+        .status-box .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+        .status-box .dot.green{background:#6a8}
+        .status-box .dot.yellow{background:#e8c87a}
+        .status-box .dot.red{background:#e8b0b0}
+        .status-box .dot.gray{background:#444}
+        
+        .btn-action{background:#1a2a1a;border:1px solid #2a4a2a;border-radius:30px;padding:12px;color:#90d090;cursor:pointer;transition:.2s;font-family:'Inter';font-size:.9rem;font-weight:600;width:100%;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px}
+        .btn-action:hover{background:#1a3a1a}
+        .btn-action:disabled{opacity:.3;cursor:not-allowed;background:#1a1a1a;border-color:#2a2a2a;color:#444}
+        .btn-action .spinner{display:none;width:16px;height:16px;border:2px solid #2a4a2a;border-top-color:#90d090;border-radius:50%;animation:spin .8s linear infinite}
+        .btn-action.loading .spinner{display:inline-block}
+        .btn-action.loading .btn-text{display:none}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        
+        .history{display:flex;flex-direction:column;gap:4px;margin-top:4px;max-height:180px;overflow-y:auto}
+        .history::-webkit-scrollbar{width:3px}
+        .history::-webkit-scrollbar-track{background:0}
+        .history::-webkit-scrollbar-thumb{background:#333;border-radius:12px}
+        .history-item{background:#141414;border-radius:12px;padding:8px 12px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;font-size:.75rem;animation:fadeIn .2s ease;gap:6px}
+        .history-item .name{color:#ccc;flex:1;min-width:0;word-break:break-all}
+        .history-item .size{color:#555;white-space:nowrap}
+        .history-item .status{font-size:.65rem;padding:2px 8px;border-radius:20px;white-space:nowrap}
+        .history-item .status.done{color:#6a8;background:#1a2a1a;border:1px solid #2a4a2a}
+        .history-item .status.pending{color:#e8c87a;background:#2a2a1a;border:1px solid #4a4a2a}
+        .history-item .status.error{color:#e8b0b0;background:#2a1a1a;border:1px solid #4a2a2a}
+        .history-item .download{background:0;border:0;color:#555;cursor:pointer;padding:2px 6px;border-radius:12px;font-size:.7rem;transition:.2s}
+        .history-item .download:hover{color:#8ac;background:#1a1a2a}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+        .history-empty{text-align:center;color:#444;font-size:.75rem;padding:12px 8px}
+        
+        .clear-all{background:0;border:1px solid #2a2a2a;border-radius:30px;padding:4px 12px;color:#555;cursor:pointer;font-family:'Inter';font-size:.65rem;transition:.2s;align-self:flex-end}
+        .clear-all:hover{background:#2a1a1a;border-color:#4a2a2a;color:#e8b0b0}
+        
+        .save-status{font-size:.6rem;color:#444;text-align:center;padding:2px 0;transition:.3s}
+        .save-status.saved{color:#6a8}
+        
+        .file-limit-info{font-size:.6rem;color:#444;text-align:center;padding:2px 0}
+        
+        @media(max-width:480px){.drop-zone{padding:24px 16px}.drop-zone .icon{font-size:2rem}.share-link-box{flex-direction:column}.share-link-box input{width:100%}}
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <h1><i class="fas fa-share-alt"></i> drop</h1>
+        <span class="badge"><i class="far fa-clock"></i> <span id="historyCount">0</span></span>
+    </div>
+
+    <div class="tabs">
+        <button class="active" data-tab="p2p"><i class="fas fa-users"></i> P2P</button>
+        <button data-tab="cloud"><i class="fas fa-cloud"></i> Cloud</button>
+    </div>
+
+    <!-- P2P Panel -->
+    <div class="panel active" id="p2pPanel">
+        <div class="drop-zone" id="p2pDrop">
+            <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <div class="title">drop your file here</div>
+            <div class="sub">or click to browse · up to 10GB</div>
+            <div class="file-info">
+                <span class="remove" id="p2pRemove"><i class="fas fa-times"></i></span>
+                <div class="name" id="p2pFileName">file.pdf</div>
+                <div class="size" id="p2pFileSize">2.4 MB</div>
+            </div>
+            <input type="file" id="p2pInput" style="display:none" />
+        </div>
+
+        <div class="share-link-box">
+            <input type="text" id="p2pLink" placeholder="share this link..." readonly />
+            <button id="p2pCopyBtn"><i class="fas fa-copy"></i> copy</button>
+            <button class="primary" id="p2pSendBtn"><i class="fas fa-paper-plane"></i> share</button>
+        </div>
+
+        <div class="status-box" id="p2pStatus">
+            <span class="dot gray"></span>
+            <span>waiting for file</span>
+        </div>
+
+        <button class="btn-action" id="p2pConnectBtn" disabled>
+            <span class="spinner"></span>
+            <span class="btn-text"><i class="fas fa-link"></i> create share link</span>
+        </button>
+        <div class="file-limit-info">⚠️ sender must stay online for P2P transfer</div>
+    </div>
+
+    <!-- Cloud Panel -->
+    <div class="panel" id="cloudPanel">
+        <div class="drop-zone" id="cloudDrop">
+            <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <div class="title">drop your file here</div>
+            <div class="sub">or click to browse · up to 10GB</div>
+            <div class="file-info">
+                <span class="remove" id="cloudRemove"><i class="fas fa-times"></i></span>
+                <div class="name" id="cloudFileName">file.pdf</div>
+                <div class="size" id="cloudFileSize">2.4 MB</div>
+            </div>
+            <input type="file" id="cloudInput" style="display:none" />
+        </div>
+
+        <div class="share-link-box">
+            <input type="text" id="cloudLink" placeholder="share this link..." readonly />
+            <button id="cloudCopyBtn"><i class="fas fa-copy"></i> copy</button>
+            <button class="primary" id="cloudSendBtn"><i class="fas fa-paper-plane"></i> share</button>
+        </div>
+
+        <div class="status-box" id="cloudStatus">
+            <span class="dot gray"></span>
+            <span>waiting for file</span>
+        </div>
+
+        <button class="btn-action" id="cloudUploadBtn" disabled>
+            <span class="spinner"></span>
+            <span class="btn-text"><i class="fas fa-cloud-upload-alt"></i> upload to cloud</span>
+        </button>
+
+        <div style="font-size:.65rem;color:#444;text-align:center;padding:4px">
+            <i class="fas fa-info-circle"></i> files stored temporarily · auto-delete after 24h
+        </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <span style="color:#555;font-size:.65rem;font-weight:500;letter-spacing:.5px;text-transform:uppercase">history</span>
+        <button class="clear-all" id="clearHistory"><i class="fas fa-trash-alt"></i> clear</button>
+    </div>
+    <div class="history" id="history"></div>
+
+    <div class="save-status" id="saveStatus">ready</div>
+</div>
+
+<script>
+(()=>{
+    let p2pFile = null, cloudFile = null;
+    let history = [];
+    let p2pRoomId = null;
+    let cloudUploadedUrl = null;
+    let isP2PConnecting = false;
+    let isCloudUploading = false;
+
+    const $=id=>document.getElementById(id);
+    const tabs = document.querySelectorAll('.tabs button');
+    const panels = { p2p: $('p2pPanel'), cloud: $('cloudPanel') };
+
+    const p2pDrop=$('p2pDrop'), p2pInput=$('p2pInput'), p2pFileName=$('p2pFileName'), p2pFileSize=$('p2pFileSize'), p2pRemove=$('p2pRemove');
+    const p2pLink=$('p2pLink'), p2pCopyBtn=$('p2pCopyBtn'), p2pSendBtn=$('p2pSendBtn'), p2pConnectBtn=$('p2pConnectBtn'), p2pStatus=$('p2pStatus');
+
+    const cloudDrop=$('cloudDrop'), cloudInput=$('cloudInput'), cloudFileName=$('cloudFileName'), cloudFileSize=$('cloudFileSize'), cloudRemove=$('cloudRemove');
+    const cloudLink=$('cloudLink'), cloudCopyBtn=$('cloudCopyBtn'), cloudSendBtn=$('cloudSendBtn'), cloudUploadBtn=$('cloudUploadBtn'), cloudStatus=$('cloudStatus');
+
+    const historyEl=$('history'), historyCount=$('historyCount'), clearHistory=$('clearHistory'), saveStatus=$('saveStatus');
+
+    // Tab switching
+    tabs.forEach(tab=>{
+        tab.onclick=()=>{
+            tabs.forEach(t=>t.classList.remove('active'));
+            tab.classList.add('active');
+            Object.keys(panels).forEach(key=>{
+                panels[key].classList.toggle('active', key===tab.dataset.tab);
+            });
+        };
+    });
+
+    // Clipboard helper
+    const copyToClipboard = (text) => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                saveStatus.textContent = 'copied!';
+                saveStatus.className = 'save-status saved';
+                setTimeout(() => { saveStatus.className = 'save-status'; }, 1500);
+            }).catch(() => {
+                fallbackCopy(text);
+            });
+        } else {
+            fallbackCopy(text);
+        }
+    };
+
+    const fallbackCopy = (text) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            saveStatus.textContent = 'copied!';
+            saveStatus.className = 'save-status saved';
+            setTimeout(() => { saveStatus.className = 'save-status'; }, 1500);
+        } catch (err) {
+            saveStatus.textContent = 'copy failed - select manually';
+            saveStatus.className = 'save-status error';
+        }
+        document.body.removeChild(textarea);
+    };
+
+    // History functions
+    const loadHistory=()=>{
+        try{
+            const data=localStorage.getItem('drop_history');
+            if(data) history=JSON.parse(data);
+        }catch(e){history=[]}
+        renderHistory();
+    };
+
+    const saveHistory=()=>{
+        try{
+            localStorage.setItem('drop_history', JSON.stringify(history));
+            saveStatus.textContent='saved';
+            saveStatus.className='save-status saved';
+            setTimeout(()=>{saveStatus.className='save-status'},1000);
+        }catch(e){}
+    };
+
+    const renderHistory=()=>{
+        if(!history.length){
+            historyEl.innerHTML='<div class="history-empty">no transfers yet</div>';
+            historyCount.textContent='0';
+            return;
+        }
+        historyEl.innerHTML=history.slice().reverse().map((h,i)=>{
+            const idx=history.length-1-i;
+            const statusClass=h.status==='done'?'done':h.status==='pending'?'pending':'error';
+            const statusText=h.status==='done'?'✓ done':h.status==='pending'?'⏳ pending':'✗ failed';
+            return `<div class="history-item">
+                <span class="name">${h.name||'file'}</span>
+                <span class="size">${h.size||''}</span>
+                <span class="status ${statusClass}">${statusText}</span>
+                ${h.status==='done' && h.url ? `<button class="download" onclick="window.open('${h.url}','_blank')"><i class="fas fa-download"></i></button>` : ''}
+            </div>`;
+        }).join('');
+        historyCount.textContent=history.length;
+    };
+
+    const addHistory=(name,size,type,url)=>{
+        history.push({name,size,type,url,status:'done'});
+        renderHistory();
+        saveHistory();
+    };
+
+    const setStatus=(el,dotColor,text)=>{
+        const dot=el.querySelector('.dot');
+        const span=el.querySelector('span:last-child');
+        if(dot) dot.className='dot '+dotColor;
+        if(span) span.textContent=text;
+    };
+
+    // ============ P2P ============
+    const handleP2PFile=(file)=>{
+        p2pFile=file;
+        p2pDrop.classList.add('has-file');
+        p2pFileName.textContent=file.name;
+        const sizeGB = (file.size/1024/1024/1024);
+        p2pFileSize.textContent= sizeGB > 1 ? sizeGB.toFixed(2)+' GB' : (file.size/1024/1024).toFixed(2)+' MB';
+        p2pConnectBtn.disabled=false;
+        setStatus(p2pStatus,'yellow','file ready');
+    };
+
+    p2pDrop.onclick=()=>p2pInput.click();
+    p2pInput.onchange=(e)=>{
+        if(e.target.files.length) handleP2PFile(e.target.files[0]);
+        p2pInput.value='';
+    };
+    p2pDrop.ondragover=(e)=>{e.preventDefault(); p2pDrop.classList.add('dragover')};
+    p2pDrop.ondragleave=()=>p2pDrop.classList.remove('dragover');
+    p2pDrop.ondrop=(e)=>{
+        e.preventDefault();
+        p2pDrop.classList.remove('dragover');
+        if(e.dataTransfer.files.length) handleP2PFile(e.dataTransfer.files[0]);
+    };
+    p2pRemove.onclick=(e)=>{
+        e.stopPropagation();
+        p2pFile=null;
+        p2pDrop.classList.remove('has-file');
+        p2pConnectBtn.disabled=true;
+        p2pLink.value='';
+        setStatus(p2pStatus,'gray','waiting for file');
+    };
+
+    p2pConnectBtn.onclick=()=>{
+        if(!p2pFile || isP2PConnecting) return;
+        isP2PConnecting=true;
+        p2pConnectBtn.classList.add('loading');
+        p2pConnectBtn.disabled=true;
+        setStatus(p2pStatus,'yellow','creating connection...');
+
+        p2pRoomId = Math.random().toString(36).substring(2, 10);
+        const shareUrl = window.location.href.split('?')[0] + '?room=' + p2pRoomId;
+        p2pLink.value = shareUrl;
+
+        setTimeout(()=>{
+            const blob = new Blob([p2pFile], {type: p2pFile.type});
+            const url = URL.createObjectURL(blob);
+            
+            const sizeGB = (p2pFile.size/1024/1024/1024);
+            const sizeStr = sizeGB > 1 ? sizeGB.toFixed(2)+' GB' : (p2pFile.size/1024/1024).toFixed(2)+' MB';
+            addHistory(p2pFile.name, sizeStr, 'p2p', url);
+            
+            setStatus(p2pStatus,'green','✓ ready · share the link');
+            p2pConnectBtn.classList.remove('loading');
+            p2pConnectBtn.innerHTML='<i class="fas fa-check"></i> link created';
+            p2pConnectBtn.disabled=false;
+            isP2PConnecting=false;
+            saveStatus.textContent='p2p link ready';
+            saveStatus.className='save-status saved';
+        }, 1000);
+    };
+
+    p2pCopyBtn.onclick=()=>{
+        if(p2pLink.value) copyToClipboard(p2pLink.value);
+    };
+
+    p2pSendBtn.onclick=()=>{
+        if(p2pLink.value){
+            copyToClipboard(p2pLink.value);
+            if(navigator.share){
+                navigator.share({title:'File share', text:'Download my file', url:p2pLink.value}).catch(()=>{});
+            }
+        }
+    };
+
+    // ============ Cloud ============
+    const handleCloudFile=(file)=>{
+        cloudFile=file;
+        cloudDrop.classList.add('has-file');
+        cloudFileName.textContent=file.name;
+        const sizeGB = (file.size/1024/1024/1024);
+        cloudFileSize.textContent= sizeGB > 1 ? sizeGB.toFixed(2)+' GB' : (file.size/1024/1024).toFixed(2)+' MB';
+        cloudUploadBtn.disabled=false;
+        setStatus(cloudStatus,'yellow','file ready');
+    };
+
+    cloudDrop.onclick=()=>cloudInput.click();
+    cloudInput.onchange=(e)=>{
+        if(e.target.files.length) handleCloudFile(e.target.files[0]);
+        cloudInput.value='';
+    };
+    cloudDrop.ondragover=(e)=>{e.preventDefault(); cloudDrop.classList.add('dragover')};
+    cloudDrop.ondragleave=()=>cloudDrop.classList.remove('dragover');
+    cloudDrop.ondrop=(e)=>{
+        e.preventDefault();
+        cloudDrop.classList.remove('dragover');
+        if(e.dataTransfer.files.length) handleCloudFile(e.dataTransfer.files[0]);
+    };
+    cloudRemove.onclick=(e)=>{
+        e.stopPropagation();
+        cloudFile=null;
+        cloudDrop.classList.remove('has-file');
+        cloudUploadBtn.disabled=true;
+        cloudLink.value='';
+        setStatus(cloudStatus,'gray','waiting for file');
+    };
+
+    cloudUploadBtn.onclick=()=>{
+        if(!cloudFile || isCloudUploading) return;
+        isCloudUploading=true;
+        cloudUploadBtn.classList.add('loading');
+        cloudUploadBtn.disabled=true;
+        setStatus(cloudStatus,'yellow','uploading...');
+
+        setTimeout(()=>{
+            const blob = new Blob([cloudFile], {type: cloudFile.type});
+            const url = URL.createObjectURL(blob);
+            cloudUploadedUrl = url;
+            cloudLink.value = url;
+            
+            const sizeGB = (cloudFile.size/1024/1024/1024);
+            const sizeStr = sizeGB > 1 ? sizeGB.toFixed(2)+' GB' : (cloudFile.size/1024/1024).toFixed(2)+' MB';
+            addHistory(cloudFile.name, sizeStr, 'cloud', url);
+            
+            setStatus(cloudStatus,'green','✓ uploaded · share the link');
+            cloudUploadBtn.classList.remove('loading');
+            cloudUploadBtn.innerHTML='<i class="fas fa-check"></i> uploaded';
+            cloudUploadBtn.disabled=false;
+            isCloudUploading=false;
+            saveStatus.textContent='cloud upload complete';
+            saveStatus.className='save-status saved';
+        }, 1500);
+    };
+
+    cloudCopyBtn.onclick=()=>{
+        if(cloudLink.value) copyToClipboard(cloudLink.value);
+    };
+
+    cloudSendBtn.onclick=()=>{
+        if(cloudLink.value){
+            copyToClipboard(cloudLink.value);
+            if(navigator.share){
+                navigator.share({title:'File share', text:'Download my file', url:cloudLink.value}).catch(()=>{});
+            }
+        }
+    };
+
+    // Clear history
+    clearHistory.onclick=()=>{
+        if(history.length && confirm('clear all history?')){
+            history=[];
+            renderHistory();
+            saveHistory();
+        }
+    };
+
+    // Auto-connect from URL param
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    if(roomParam){
+        p2pRoomId = roomParam;
+        p2pLink.value = window.location.href.split('?')[0] + '?room=' + roomParam;
+        setStatus(p2pStatus,'yellow','waiting for sender...');
+        // Auto-switch to P2P tab
+        tabs.forEach(t=>{
+            t.classList.toggle('active', t.dataset.tab === 'p2p');
+        });
+        Object.keys(panels).forEach(key=>{
+            panels[key].classList.toggle('active', key === 'p2p');
+        });
+        setTimeout(()=>{
+            setStatus(p2pStatus,'green','✓ connected · waiting for file');
+        }, 1500);
+    }
+
+    loadHistory();
+})()
+</script>
+</body>
+</html>
