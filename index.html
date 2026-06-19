@@ -196,7 +196,6 @@ let torrent = null;
 let downloadClient = null;
 let activeMagnet = null;
 let activeFileName = null;
-let shareLinks = {};
 
 const $=id=>document.getElementById(id);
 const tabs = document.querySelectorAll('.tabs button');
@@ -319,9 +318,11 @@ fill.style.width = '0%';
 }
 };
 
-const generateShareLink = (fileId) => {
+const generateShareLink = (magnetUri, fileName, fileSize) => {
 const baseUrl = window.location.href.split('?')[0];
-return baseUrl + '?download=' + fileId;
+const encodedMagnet = encodeURIComponent(magnetUri);
+const encodedName = encodeURIComponent(fileName);
+return baseUrl + '?m=' + encodedMagnet + '&n=' + encodedName + '&s=' + fileSize;
 };
 
 const handleUploadFile = (file) => {
@@ -378,22 +379,7 @@ client.seed(uploadFile, (torrent) => {
 torrent = torrent;
 const magnetUri = torrent.magnetURI;
 
-const fileId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-
-shareLinks[fileId] = {
-magnet: magnetUri,
-name: uploadFile.name,
-size: uploadFile.size,
-created: Date.now()
-};
-
-try {
-const saved = JSON.parse(localStorage.getItem('share_links') || '{}');
-saved[fileId] = shareLinks[fileId];
-localStorage.setItem('share_links', JSON.stringify(saved));
-} catch(e) {}
-
-const shareUrl = generateShareLink(fileId);
+const shareUrl = generateShareLink(magnetUri, uploadFile.name, uploadFile.size);
 uploadLink.value = shareUrl;
 
 updateProgress(uploadProgress, uploadProgressFill, 100);
@@ -530,41 +516,41 @@ return;
 setStatus(downloadStatus, 'yellow', 'processing...');
 
 try {
-let magnetUri = input;
+let magnetUri = null;
 let fileName = 'file';
 let fileSize = 0;
 
-if (input.includes('?download=')) {
+const urlParams = new URLSearchParams(input.split('?')[1]);
+if (urlParams.has('m')) {
+magnetUri = decodeURIComponent(urlParams.get('m'));
+fileName = decodeURIComponent(urlParams.get('n') || 'file');
+fileSize = parseInt(urlParams.get('s')) || 0;
+} else if (input.includes('?download=')) {
 const fileId = input.split('?download=')[1];
-let linkData = shareLinks[fileId];
-
-if (!linkData) {
 try {
 const saved = JSON.parse(localStorage.getItem('share_links') || '{}');
-linkData = saved[fileId];
-} catch(e) {}
-}
-
+const linkData = saved[fileId];
 if (linkData && linkData.magnet) {
 magnetUri = linkData.magnet;
 fileName = linkData.name || 'file';
 fileSize = linkData.size || 0;
-} else {
-if (!input.startsWith('magnet:')) {
-setStatus(downloadStatus, 'red', 'could not find file - share link may have expired');
-dlStatusText.textContent = 'error: file not found';
-return;
 }
+} catch(e) {}
+}
+
+if (!magnetUri) {
+if (input.startsWith('magnet:')) {
+magnetUri = input;
+} else {
+setStatus(downloadStatus, 'red', 'invalid share link');
+dlStatusText.textContent = 'error: invalid link';
+return;
 }
 }
 
 if (!magnetUri.startsWith('magnet:')) {
-if (input.startsWith('magnet:')) {
-magnetUri = input;
-} else {
-setStatus(downloadStatus, 'red', 'please enter a valid share link');
+setStatus(downloadStatus, 'red', 'invalid magnet link');
 return;
-}
 }
 
 activeMagnet = magnetUri;
@@ -602,15 +588,20 @@ if (e.key === 'Enter') downloadBtn.click();
 };
 
 const urlParams = new URLSearchParams(window.location.search);
-const downloadParam = urlParams.get('download');
-if (downloadParam) {
+if (urlParams.has('m')) {
+const magnet = decodeURIComponent(urlParams.get('m'));
+const name = decodeURIComponent(urlParams.get('n') || 'file');
+const size = urlParams.get('s') || 0;
+
 tabs.forEach(t=>{
 t.classList.toggle('active', t.dataset.tab === 'download');
 });
 Object.keys(panels).forEach(key=>{
 panels[key].classList.toggle('active', key === 'download');
 });
-downloadUrl.value = window.location.href.split('?')[0] + '?download=' + downloadParam;
+
+const fullUrl = window.location.href;
+downloadUrl.value = fullUrl;
 setTimeout(() => downloadBtn.click(), 800);
 }
 
