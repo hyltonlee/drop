@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
-    <title>drop · share</title>
+    <title>drop</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
@@ -96,6 +96,13 @@
         .peer-info{font-size:.65rem;color:#555;text-align:center;padding:4px}
         .peer-info strong{color:#888}
         
+        .download-progress{display:none;padding:16px;background:#0D0D0D;border-radius:12px;border:1px solid #222;margin-top:12px}
+        .download-progress .file-name{color:#e0e0e0;font-size:.85rem;font-weight:500;margin-bottom:8px}
+        .download-progress .bar{height:8px;background:#1a1a1a;border-radius:999px;overflow:hidden;border:1px solid #2a2a2a}
+        .download-progress .bar .fill{height:100%;width:0%;background:#6a8;border-radius:999px;transition:width .3s ease}
+        .download-progress .info{display:flex;justify-content:space-between;font-size:.7rem;color:#555;margin-top:6px}
+        .download-progress .status-text{color:#888;font-size:.8rem;text-align:center;margin-top:8px}
+        
         @media(max-width:480px){.drop-zone{padding:24px 16px}.drop-zone .icon{font-size:2rem}.share-link-box{flex-direction:column}.share-link-box input{width:100%}}
     </style>
 </head>
@@ -125,7 +132,7 @@
         </div>
 
         <div class="share-link-box">
-            <input type="text" id="uploadLink" placeholder="magnet link will appear here..." readonly />
+            <input type="text" id="uploadLink" placeholder="share link will appear here..." readonly />
             <button id="uploadCopyBtn"><i class="fas fa-copy"></i> copy</button>
             <button class="primary" id="uploadSendBtn"><i class="fas fa-paper-plane"></i> share</button>
         </div>
@@ -141,7 +148,7 @@
 
         <button class="btn-action" id="uploadBtn" disabled>
             <span class="spinner"></span>
-            <span class="btn-text"><i class="fas fa-upload"></i> create torrent</span>
+            <span class="btn-text"><i class="fas fa-upload"></i> create share link</span>
         </button>
         
         <div class="peer-info" id="peerInfo" style="display:none">
@@ -158,15 +165,25 @@
     <div class="panel" id="downloadPanel">
         <div class="share-link-box" style="padding:16px;flex-direction:column;align-items:stretch;gap:12px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <input type="text" id="downloadUrl" placeholder="paste magnet link..." style="flex:1;min-width:120px;background:#0D0D0D;border:1px solid #2a2a2a;border-radius:30px;padding:10px 16px;font-family:'Inter';font-size:.9rem;color:#f0f0f0;outline:0" />
+                <input type="text" id="downloadUrl" placeholder="paste the share link..." style="flex:1;min-width:120px;background:#0D0D0D;border:1px solid #2a2a2a;border-radius:30px;padding:10px 16px;font-family:'Inter';font-size:.9rem;color:#f0f0f0;outline:0" />
                 <button id="downloadBtn" style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:30px;padding:10px 20px;color:#90d090;cursor:pointer;transition:.2s;font-family:'Inter';font-size:.85rem;font-weight:600;white-space:nowrap">
-                    <i class="fas fa-download"></i> download
+                    <i class="fas fa-download"></i> get file
                 </button>
             </div>
             <div class="status-box" id="downloadStatus" style="margin-top:0">
                 <span class="dot gray"></span>
-                <span>paste a magnet link to download</span>
+                <span>paste a share link to download</span>
             </div>
+        </div>
+        
+        <div class="download-progress" id="downloadProgress">
+            <div class="file-name" id="dlFileName">file.pdf</div>
+            <div class="bar"><div class="fill" id="dlProgressFill"></div></div>
+            <div class="info">
+                <span id="dlProgressText">0%</span>
+                <span id="dlSpeed">0 MB/s</span>
+            </div>
+            <div class="status-text" id="dlStatusText">connecting to peers...</div>
         </div>
     </div>
 
@@ -188,6 +205,8 @@
     let torrent = null;
     let downloadClient = null;
     let downloadTorrent = null;
+    let activeDownloads = {};
+    let shareLinks = {};
 
     const $=id=>document.getElementById(id);
     const tabs = document.querySelectorAll('.tabs button');
@@ -198,6 +217,8 @@
     const uploadProgress=$('uploadProgress'), uploadProgressFill=$('uploadProgressFill');
 
     const downloadUrl=$('downloadUrl'), downloadBtn=$('downloadBtn'), downloadStatus=$('downloadStatus');
+    const downloadProgress=$('downloadProgress'), dlProgressFill=$('dlProgressFill');
+    const dlFileName=$('dlFileName'), dlProgressText=$('dlProgressText'), dlSpeed=$('dlSpeed'), dlStatusText=$('dlStatusText');
 
     const historyEl=$('history'), historyCount=$('historyCount'), clearHistory=$('clearHistory'), saveStatus=$('saveStatus');
     const peerInfo=$('peerInfo'), peerCount=$('peerCount');
@@ -307,6 +328,11 @@
         }
     };
 
+    const generateShareLink = (fileId) => {
+        const baseUrl = window.location.href.split('?')[0];
+        return baseUrl + '?download=' + fileId;
+    };
+
     const handleUploadFile = (file) => {
         if (file.size > 10 * 1024 * 1024 * 1024) {
             alert('File too large. Max 10GB.');
@@ -343,7 +369,6 @@
         setStatus(uploadStatus, 'gray', 'waiting for file');
     };
 
-    // Create WebTorrent
     uploadBtn.onclick = async () => {
         if (!uploadFile || isUploading) return;
 
@@ -361,32 +386,48 @@
             client.seed(uploadFile, (torrent) => {
                 torrent = torrent;
                 const magnetUri = torrent.magnetURI;
-                uploadLink.value = magnetUri;
+
+                const fileId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+
+                shareLinks[fileId] = {
+                    magnet: magnetUri,
+                    name: uploadFile.name,
+                    size: uploadFile.size,
+                    created: Date.now()
+                };
+
+                try {
+                    const saved = JSON.parse(localStorage.getItem('share_links') || '{}');
+                    saved[fileId] = shareLinks[fileId];
+                    localStorage.setItem('share_links', JSON.stringify(saved));
+                } catch(e) {}
+
+                const shareUrl = generateShareLink(fileId);
+                uploadLink.value = shareUrl;
                 
                 updateProgress(uploadProgress, uploadProgressFill, 100);
                 
                 const sizeGB = (uploadFile.size / 1024 / 1024 / 1024);
                 const sizeStr = sizeGB > 1 ? sizeGB.toFixed(2) + ' GB' : (uploadFile.size / 1024 / 1024).toFixed(2) + ' MB';
-                addHistory(uploadFile.name, sizeStr, magnetUri);
+                addHistory(uploadFile.name, sizeStr, shareUrl);
 
-                setStatus(uploadStatus, 'green', '✓ torrent created! share the magnet link');
-                saveStatus.textContent = 'torrent ready!';
+                setStatus(uploadStatus, 'green', '✓ share link created!');
+                saveStatus.textContent = 'share link ready!';
                 saveStatus.className = 'save-status saved';
                 
                 uploadBtn.classList.remove('loading');
-                uploadBtn.innerHTML = '<i class="fas fa-check"></i> seeding';
+                uploadBtn.innerHTML = '<i class="fas fa-check"></i> sharing';
                 uploadBtn.disabled = false;
                 isUploading = false;
 
                 peerInfo.style.display = 'block';
                 peerCount.textContent = '0';
-
+                
                 torrent.on('peer', () => {
                     peerCount.textContent = torrent.numPeers || 0;
                 });
-                
-                // Auto-copy the magnet link
-                copyToClipboard(magnetUri);
+
+                copyToClipboard(shareUrl);
             });
             
         } catch (error) {
@@ -408,66 +449,167 @@
         if (uploadLink.value) {
             copyToClipboard(uploadLink.value);
             if (navigator.share) {
-                navigator.share({ title: 'File share', text: 'Download my file using this magnet link:\n' + uploadLink.value }).catch(() => {});
+                navigator.share({ title: 'File share', text: 'Download my file: ' + uploadLink.value }).catch(() => {});
             }
         }
     };
 
-    downloadBtn.onclick = async () => {
-        const magnetUri = downloadUrl.value.trim();
-        if (!magnetUri) {
-            setStatus(downloadStatus, 'red', 'enter a magnet link');
-            return;
-        }
-
-        if (!magnetUri.startsWith('magnet:')) {
-            setStatus(downloadStatus, 'red', 'please enter a valid magnet link');
-            return;
-        }
-
-        setStatus(downloadStatus, 'yellow', 'connecting to peers...');
-
-        try {
+    const downloadWithProgress = (magnetUri, fileName, fileSize) => {
+        return new Promise((resolve, reject) => {
             if (!downloadClient) {
                 downloadClient = new WebTorrent();
             }
 
+            downloadProgress.style.display = 'block';
+            dlFileName.textContent = fileName || 'file';
+            dlProgressFill.style.width = '0%';
+            dlProgressText.textContent = '0%';
+            dlSpeed.textContent = '0 MB/s';
+            dlStatusText.textContent = 'connecting to peers...';
+
+            let lastProgress = 0;
+            let startTime = Date.now();
+            let lastTime = startTime;
+            let lastBytes = 0;
+
             downloadClient.add(magnetUri, (torrent) => {
                 downloadTorrent = torrent;
-                setStatus(downloadStatus, 'yellow', 'downloading...');
+                const file = torrent.files[0];
+                
+                if (!file) {
+                    reject(new Error('No file in torrent'));
+                    return;
+                }
 
-                torrent.files.forEach(file => {
+                dlStatusText.textContent = 'downloading...';
+
+                torrent.on('download', (bytes) => {
+                    const progress = torrent.progress * 100;
+                    dlProgressFill.style.width = progress + '%';
+                    dlProgressText.textContent = Math.round(progress) + '%';
+
+                    const now = Date.now();
+                    const timeDiff = (now - lastTime) / 1000;
+                    if (timeDiff > 0.5) {
+                        const speed = (torrent.downloadSpeed / 1024 / 1024);
+                        dlSpeed.textContent = speed.toFixed(1) + ' MB/s';
+                        lastTime = now;
+                    }
+                });
+
+                torrent.on('done', () => {
+                    dlStatusText.textContent = 'complete!';
+                    dlProgressFill.style.width = '100%';
+                    dlProgressText.textContent = '100%';
+                    
+                    // Get the file blob
                     file.getBlobURL((err, url) => {
                         if (err) {
-                            setStatus(downloadStatus, 'red', 'download failed');
+                            reject(err);
                             return;
                         }
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = file.name;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        setTimeout(() => URL.revokeObjectURL(url), 5000);
-                        setStatus(downloadStatus, 'green', '✓ downloaded');
-                        saveStatus.textContent = 'download complete';
-                        saveStatus.className = 'save-status saved';
-                        setTimeout(() => { saveStatus.className = 'save-status'; }, 2000);
+                        resolve({ url, file });
                     });
                 });
+
+                torrent.on('error', (err) => {
+                    reject(err);
+                });
             });
+        });
+    };
+
+    downloadBtn.onclick = async () => {
+        const input = downloadUrl.value.trim();
+        if (!input) {
+            setStatus(downloadStatus, 'red', 'enter a share link');
+            return;
+        }
+
+        setStatus(downloadStatus, 'yellow', 'processing...');
+
+        try {
+            let magnetUri = input;
+            let fileName = 'file';
+            let fileSize = 0;
+
+            if (input.includes('?download=')) {
+                const fileId = input.split('?download=')[1];
+
+                let linkData = shareLinks[fileId];
+
+                if (!linkData) {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('share_links') || '{}');
+                        linkData = saved[fileId];
+                    } catch(e) {}
+                }
+                
+                if (linkData && linkData.magnet) {
+                    magnetUri = linkData.magnet;
+                    fileName = linkData.name || 'file';
+                    fileSize = linkData.size || 0;
+                } else {
+
+                    if (!input.startsWith('magnet:')) {
+                        throw new Error('Could not find the file. The share link may have expired.');
+                    }
+                }
+            }
+
+
+            if (!magnetUri.startsWith('magnet:')) {
+
+                if (input.startsWith('magnet:')) {
+                    magnetUri = input;
+                } else {
+                    throw new Error('Please enter a valid share link or magnet URI');
+                }
+            }
+
+            setStatus(downloadStatus, 'yellow', 'downloading...');
+            
+            const result = await downloadWithProgress(magnetUri, fileName, fileSize);
+  
+            const a = document.createElement('a');
+            a.href = result.url;
+            a.download = result.file.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(result.url), 5000);
+
+            setStatus(downloadStatus, 'green', '✓ downloaded');
+            saveStatus.textContent = 'download complete';
+            saveStatus.className = 'save-status saved';
+            setTimeout(() => { saveStatus.className = 'save-status'; }, 2000);
 
         } catch (error) {
             console.error('Download error:', error);
             setStatus(downloadStatus, 'red', 'download failed: ' + error.message);
             saveStatus.textContent = 'download failed';
             saveStatus.className = 'save-status error';
+            dlStatusText.textContent = 'error: ' + error.message;
         }
     };
 
     downloadUrl.onkeydown = (e) => {
         if (e.key === 'Enter') downloadBtn.click();
     };
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const downloadParam = urlParams.get('download');
+    if (downloadParam) {
+
+        tabs.forEach(t=>{
+            t.classList.toggle('active', t.dataset.tab === 'download');
+        });
+        Object.keys(panels).forEach(key=>{
+            panels[key].classList.toggle('active', key === 'download');
+        });
+        downloadUrl.value = window.location.href.split('?')[0] + '?download=' + downloadParam;
+        setTimeout(() => downloadBtn.click(), 500);
+    }
 
     clearHistory.onclick = () => {
         if (history.length && confirm('clear all history?')) {
